@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="89378d57-684b-46fb-8ab7-84e1451d6676" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="onixfeedFlow" doc:id="31b29eb4-f510-4e00-b483-0d804839dcde" >
+		<http:listener doc:name="Listener" doc:id="ede8e93a-e106-4d21-bd0a-02d2034cac4e" config-ref="HTTP_Listener_config" path="/onixfeedmapping"/>
+		<file:read doc:name="Read" doc:id="6bab50af-ca4c-40a2-9380-3bcbb7a4a767" path="C:\Users\Prasanth\Downloads\416700102_2024-04-04.xml"/>
+		<ee:transform doc:name="Transform Message" doc:id="7d4dc860-d8ff-4105-8d24-d433dab28ea4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json duplicateKeyAsArray = true
+---
+payload.ONIXMessage.*Product]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="0f8e3ab7-f50d-445b-a073-eb7d55e307c6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+fun mini2(value, key, index) =  {
+	(value map(v2,i2) -> if ( v2 is String ) (key ++ i2 as String):v2 
+						else if ( v2 == null ) (key ++ i2 as String): v2
+						else (v2 mapObject(v,k,i)-> (key ++ i2 as String ++ k): if ( v is Object ) mini2([v],(key ++ i2 as String ++ k),i2) else if ( v is Array ) mini2(v,k,i) else v))
+}
+---
+payload map ($ mapObject (value, key, index) -> if ( value is String ) (key):value 
+												else if ( value == null ) (key):value
+												else if ( value is Array ) mini2(value, key, index) 
+												else mini2([value], key, index))]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="728189cc-0314-4cfa-9a95-295fc4825c91" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+fun func3(obj, prefix) =
+    obj mapObject ((value, key, index) -> 
+        if ( value is Object ) func3(value, prefix ++ key)
+        else
+            {
+	(if ( prefix != "" ) prefix ++ key else key): value
+})
+fun func(inputObj) =
+    func3(inputObj, "")
+---
+payload map func($)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="70c23b3d-bea5-4d13-bed1-5e533678c5e0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xlsx header = true
+var arr= ((payload reduce($$ ++ $)) pluck $$) distinctBy $
+---
+"sheet": (payload map(val,index)-> {
+	(arr map(v,i)->{
+		(v): val[v]
+	})
+})]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<file:write doc:name="Write" doc:id="a7d3af3f-700e-48d5-b63f-31d1dbe504a8" path="C:\Users\Prasanth\Desktop\XML to xls\ONIXProduct190.xlsx"/>
+	</flow>
+</mule>
